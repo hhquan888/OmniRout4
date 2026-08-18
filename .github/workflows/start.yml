@@ -48,8 +48,7 @@ jobs:
           curl -sL "$CHISEL_URL" -o chisel.gz
           gunzip chisel.gz
           chmod +x chisel
-          # Thay <ten-app> bằng domain Render thật của chisel server
-          ./chisel client https://omniroute-geff.onrender.com R:80:localhost:20128 &
+          ./chisel client https://omniroute-geff.onrender.com R:8080:localhost:20128 &
           sleep 5
           echo "Tunnel connected -> https://omniroute-geff.onrender.com"
 
