@@ -40,7 +40,13 @@ jobs:
       # ---------- 3. Cài & kết nối chisel client vào relay server trên Render ----------
       - name: Install & connect chisel tunnel
         run: |
-          curl -sL https://github.com/jpillora/chisel/releases/latest/download/chisel_linux_amd64.gz | gunzip > chisel
+          CHISEL_URL=$(curl -sL https://api.github.com/repos/jpillora/chisel/releases/latest \
+            | grep "browser_download_url" \
+            | grep "linux_amd64.gz" \
+            | cut -d '"' -f 4)
+          echo "Downloading: $CHISEL_URL"
+          curl -sL "$CHISEL_URL" -o chisel.gz
+          gunzip chisel.gz
           chmod +x chisel
           # Thay <ten-app> bằng domain Render thật của chisel server
           ./chisel client https://omniroute-geff.onrender.com R:80:localhost:20128 &
