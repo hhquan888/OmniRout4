@@ -38,11 +38,11 @@ jobs:
           curl -sL https://github.com/jpillora/chisel/releases/latest/download/chisel_linux_amd64.gz | gunzip > chisel
           chmod +x chisel
           # Thay <ten-app> bằng domain Render thật của chisel server
-          ./chisel client https://<ten-app>.onrender.com R:80:localhost:20128 &
+          ./chisel client https://omniroute-geff.onrender.com R:80:localhost:20128 &
           sleep 5
-          echo "Tunnel connected -> https://<ten-app>.onrender.com"
+          echo "Tunnel connected -> https://omniroute-geff.onrender.com"
 
-      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết hạn ----------
+      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết -------
       - name: Trigger next job before timeout
         run: |
           sleep 20400   # ~340 phút, chừa buffer để job2 kịp lên trước khi job1 (355p) kết thúc
