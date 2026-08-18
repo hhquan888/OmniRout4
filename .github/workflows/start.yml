@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: '0 */6 * * *'   # backup: tự chạy lại mỗi 6h nếu self-trigger (bước 4) lỡ fail giữa chừng
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -15,7 +19,8 @@ jobs:
       - name: Restore previous data
         uses: dawidd6/action-download-artifact@v6
         with:
-          workflow: keep-alive.yml
+          github_token: ${{ secrets.GH_PAT }}
+          workflow: start.yml
           name: omniroute-data
           path: ./data
           if_no_artifact_found: warn   # lần đầu chưa có artifact -> bỏ qua, không fail job
@@ -42,14 +47,14 @@ jobs:
           sleep 5
           echo "Tunnel connected -> https://omniroute-geff.onrender.com"
 
-      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết -------
+      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết hạn ----------
       - name: Trigger next job before timeout
         run: |
           sleep 20400   # ~340 phút, chừa buffer để job2 kịp lên trước khi job1 (355p) kết thúc
           curl -s -X POST \
             -H "Authorization: token ${{ secrets.GH_PAT }}" \
             -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/keep-alive.yml/dispatches \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/start.yml/dispatches \
             -d '{"ref":"main"}'
           echo "Triggered next run"
           sleep 300   # sống thêm 5p để job2 kịp connect chisel, giảm gap gần về 0
