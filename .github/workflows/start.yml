@@ -29,6 +29,7 @@ jobs:
       - name: Run OmniRoute
         run: |
           mkdir -p ./data
+          chmod -R 777 ./data
           docker run -d --name omniroute -p 20128:20128 \
             -v $(pwd)/data:/app/data \
             --entrypoint node \
