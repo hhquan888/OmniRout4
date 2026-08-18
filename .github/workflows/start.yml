@@ -1,0 +1,69 @@
+name: OmniRoute Runner
+
+on:
+  workflow_dispatch:   # chạy tay qua tab Actions
+  schedule:
+    - cron: '0 */6 * * *'   # backup: tự chạy lại mỗi 6h nếu self-trigger (bước 4) lỡ fail giữa chừng
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355   # GitHub free runner giới hạn cứng 360p (6h), chừa buffer 5p
+
+    steps:
+      # ---------- 1. Khôi phục data từ lần chạy trước (nếu có) ----------
+      - name: Restore previous data
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: keep-alive.yml
+          name: omniroute-data
+          path: ./data
+          if_no_artifact_found: warn   # lần đầu chưa có artifact -> bỏ qua, không fail job
+
+      # ---------- 2. Chạy OmniRoute, mount data đã restore ----------
+      - name: Run OmniRoute
+        run: |
+          mkdir -p ./data
+          docker run -d --name omniroute -p 20128:20128 \
+            -v $(pwd)/data:/app/data \
+            --entrypoint node \
+            diegosouzapw/omniroute:latest dev/run-standalone.mjs
+          sleep 8
+          echo "----- container logs -----"
+          docker logs omniroute
+
+      # ---------- 3. Cài & kết nối chisel client vào relay server trên Render ----------
+      - name: Install & connect chisel tunnel
+        run: |
+          curl -sL https://github.com/jpillora/chisel/releases/latest/download/chisel_linux_amd64.gz | gunzip > chisel
+          chmod +x chisel
+          # Thay <ten-app> bằng domain Render thật của chisel server
+          ./chisel client https://<ten-app>.onrender.com R:80:localhost:20128 &
+          sleep 5
+          echo "Tunnel connected -> https://<ten-app>.onrender.com"
+
+      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết hạn ----------
+      - name: Trigger next job before timeout
+        run: |
+          sleep 20400   # ~340 phút, chừa buffer để job2 kịp lên trước khi job1 (355p) kết thúc
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/keep-alive.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo "Triggered next run"
+          sleep 300   # sống thêm 5p để job2 kịp connect chisel, giảm gap gần về 0
+
+      # ---------- 5. Lưu lại data mới nhất trước khi job kết thúc ----------
+      - name: Snapshot data before exit
+        if: always()
+        run: |
+          docker cp omniroute:/app/data/. ./data/ || true
+
+      - name: Upload data artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: omniroute-data
+          path: ./data
+          retention-days: 1   # chỉ cần bản mới nhất, tránh tích rác
