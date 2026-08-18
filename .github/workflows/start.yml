@@ -52,20 +52,12 @@ jobs:
           sleep 5
           echo "Tunnel connected -> https://omniroute-geff.onrender.com"
 
-      # ---------- 4. Tự kích hoạt job kế tiếp trước khi job này hết hạn ----------
-      - name: Trigger next job before timeout
-        run: |
-          sleep 20400   # ~340 phút, chừa buffer để job2 kịp lên trước khi job1 (355p) kết thúc
-          curl -s -X POST \
-            -H "Authorization: token ${{ secrets.GH_PAT }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/actions/workflows/start.yml/dispatches \
-            -d '{"ref":"main"}'
-          echo "Triggered next run"
-          sleep 300   # sống thêm 5p để job2 kịp connect chisel, giảm gap gần về 0
+      # ---------- 4. Chờ tới gần hết giờ, rồi snapshot data TRƯỚC khi trigger job kế tiếp ----------
+      - name: Wait until near timeout
+        run: sleep 20400   # ~340 phút, chừa buffer để job2 kịp lên trước khi job1 (355p) kết thúc
 
-      # ---------- 5. Lưu lại data mới nhất trước khi job kết thúc ----------
-      - name: Snapshot data before exit
+      # ---------- 5. Lưu data mới nhất TRƯỚC khi trigger job2, để job2 restore đúng bản mới ----------
+      - name: Snapshot data before triggering next job
         if: always()
         run: |
           docker cp omniroute:/app/data/. ./data/ || true
@@ -77,3 +69,14 @@ jobs:
           name: omniroute-data
           path: ./data
           retention-days: 1   # chỉ cần bản mới nhất, tránh tích rác
+
+      # ---------- 6. Tự kích hoạt job kế tiếp sau khi data đã được upload xong ----------
+      - name: Trigger next job
+        run: |
+          curl -s -X POST \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/start.yml/dispatches \
+            -d '{"ref":"main"}'
+          echo "Triggered next run"
+          sleep 300   # sống thêm 5p để job2 kịp connect chisel, giảm gap gần về 0
