@@ -1,13 +1,15 @@
 name: OmniRoute Runner
 
 on:
-  workflow_dispatch:   # chạy tay qua tab Actions
-  schedule:
-    - cron: '0 */6 * * *'   # backup: tự chạy lại mỗi 6h nếu self-trigger (bước 4) lỡ fail giữa chừng
+  workflow_dispatch:   # chạy tay qua tab Actions (chỉ dùng khi chain bị chết hẳn)
 
 permissions:
   actions: read
   contents: read
+
+concurrency:
+  group: omniroute-keepalive
+  cancel-in-progress: true   # job mới chạy -> tự hủy job cũ đang chạy, tránh 2+ job đè lên nhau giành port chisel
 
 jobs:
   run:
@@ -61,6 +63,7 @@ jobs:
       - name: Snapshot data before triggering next job
         if: always()
         run: |
+          docker exec omniroute chmod -R 777 /app/data || true
           docker cp omniroute:/app/data/. ./data/ || true
 
       - name: Upload data artifact
