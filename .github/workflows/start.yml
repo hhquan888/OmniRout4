@@ -1,15 +1,13 @@
 name: OmniRoute Runner
 
 on:
-  workflow_dispatch:   # chạy tay qua tab Actions (chỉ dùng khi chain bị chết hẳn)
+  workflow_dispatch:   # chạy tay qua tab Actions
+  schedule:
+    - cron: '0 */6 * * *'   # backup: tự chạy lại mỗi 6h nếu self-trigger (bước 4) lỡ fail giữa chừng
 
 permissions:
   actions: read
-  contents: read
-
-concurrency:
-  group: omniroute-keepalive
-  cancel-in-progress: true   # job mới chạy -> tự hủy job cũ đang chạy, tránh 2+ job đè lên nhau giành port chisel
+  contents: write   # cần write để push data lên branch data-store
 
 jobs:
   run:
@@ -17,15 +15,18 @@ jobs:
     timeout-minutes: 355   # GitHub free runner giới hạn cứng 360p (6h), chừa buffer 5p
 
     steps:
-      # ---------- 1. Khôi phục data từ lần chạy trước (nếu có) ----------
+      # ---------- 1. Khôi phục data từ branch data-store (nếu có) ----------
       - name: Restore previous data
-        uses: dawidd6/action-download-artifact@v6
-        with:
-          github_token: ${{ secrets.GH_PAT }}
-          workflow: start.yml
-          name: omniroute-data
-          path: ./data
-          if_no_artifact_found: warn   # lần đầu chưa có artifact -> bỏ qua, không fail job
+        run: |
+          git clone --depth 1 --branch data-store \
+            https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git \
+            data-checkout 2>/dev/null && echo "Found data-store branch" || echo "Chưa có branch data-store, chạy như lần đầu"
+          mkdir -p ./data
+          if [ -d data-checkout ]; then
+            cp -r data-checkout/. ./data/ 2>/dev/null || true
+            rm -rf data-checkout
+            echo "Đã khôi phục $(du -sh ./data | cut -f1) dữ liệu"
+          fi
 
       # ---------- 2. Chạy OmniRoute, mount data đã restore ----------
       - name: Run OmniRoute
@@ -63,16 +64,23 @@ jobs:
       - name: Snapshot data before triggering next job
         if: always()
         run: |
-          docker exec omniroute chmod -R 777 /app/data || true
           docker cp omniroute:/app/data/. ./data/ || true
 
-      - name: Upload data artifact
+      - name: Push data to GitHub (branch data-store)
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: omniroute-data
-          path: ./data
-          retention-days: 1   # chỉ cần bản mới nhất, tránh tích rác
+        run: |
+          rm -rf data-checkout
+          mkdir -p data-checkout
+          cp -r ./data/. data-checkout/ 2>/dev/null || true
+          cd data-checkout
+          git init -q
+          git checkout -q -b data-store
+          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          git commit -q -m "Data snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "Không có gì thay đổi để commit"
+          git remote add origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git
+          git push -f origin data-store   # force push, chỉ giữ 1 commit -> tránh phình repo
 
       # ---------- 6. Tự kích hoạt job kế tiếp sau khi data đã được upload xong ----------
       - name: Trigger next job
