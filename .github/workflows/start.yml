@@ -24,6 +24,7 @@ jobs:
           mkdir -p ./data
           if [ -d data-checkout ]; then
             cp -r data-checkout/. ./data/ 2>/dev/null || true
+            rm -rf ./data/.git   # QUAN TRỌNG: bỏ .git đã clone kèm, tránh dính branch data-store vào ./data
             rm -rf data-checkout
             echo "Đã khôi phục $(du -sh ./data | cut -f1) dữ liệu"
           fi
@@ -74,7 +75,7 @@ jobs:
           cp -r ./data/. data-checkout/ 2>/dev/null || true
           cd data-checkout
           git init -q
-          git checkout -q -b data-store
+          git checkout -q -B data-store   # -B: tạo mới hoặc reset nếu đã tồn tại, không lỗi như -b
           git config user.email "actions@github.com"
           git config user.name "github-actions[bot]"
           git add -A
